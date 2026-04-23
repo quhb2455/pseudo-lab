@@ -129,7 +129,7 @@
 현재 실행은 아래 명령으로 한다.
 
 ```bash
-/home/sub/anaconda3/envs/RL/bin/python /home/sub/workspace/RL_project/pseudo-lab/run.py
+python run.py
 ```
 
 ## TODO
