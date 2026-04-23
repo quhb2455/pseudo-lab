@@ -1,8 +1,5 @@
 # pseudo-lab
 
-`pseudo-lab`은 `robosuite PickPlace` 기반의 커스텀 teleoperation 실험 폴더다.  
-Panda 로봇을 키보드로 조작하면서 동적 장애물이 있는 환경에서 데이터를 수집하고, 성공 episode를 `HDF5`로 저장한다.
-
 ## 주요 파일
 
 - [run.py](/home/sub/workspace/RL_project/pseudo-lab/run.py): 메인 실행 스크립트. 환경 생성, 키보드 teleop, episode 기록, 성공 episode 저장을 담당한다.
