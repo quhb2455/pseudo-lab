@@ -24,11 +24,6 @@ uv run python run.py
 
 ## 환경 공유
 
-- 의존성 정의는 [pyproject.toml](/home/sub/workspace/RL_project/pseudo-lab/pyproject.toml) 에 있다.
-- 잠긴 버전 정보는 [uv.lock](/home/sub/workspace/RL_project/pseudo-lab/uv.lock) 에 있다.
-- `uv sync`를 실행하면 `.venv`가 생성되고 lock 기준으로 패키지가 설치된다.
-- 이 프로젝트는 패키지 배포용 구조가 아니라 실행 스크립트 중심 구조이므로, `uv`가 로컬 프로젝트 자체를 설치하지 않도록 설정해 두었다.
-
 ```bash
 uv sync
 uv run python run.py
