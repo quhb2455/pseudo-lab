@@ -21,10 +21,3 @@
 uv sync
 uv run python run.py
 ```
-
-## 환경 공유
-
-```bash
-uv sync
-uv run python run.py
-```
