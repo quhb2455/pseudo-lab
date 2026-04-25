@@ -1,3 +1,4 @@
+import argparse
 import json
 import time
 from copy import deepcopy
@@ -15,7 +16,7 @@ from robosuite.devices import Keyboard
 from robosuite.wrappers import VisualizationWrapper
 
 
-SAVE_DIR = Path("/home/sub/workspace/RL_project/pseudo-lab/data/teleop_demos")
+SAVE_DIR = Path(__file__).parent / "data" / "teleop_demos"
 ROBOT_NAME = "Panda"
 
 
@@ -53,7 +54,7 @@ class SimpleKeyboard(Keyboard):
             pass
 
 
-def make_env():
+def make_env(single_object_mode=0, object_type=None, wide_obstacle=False, obstacle_speed=None):
     # Panda 기본 controller 설정을 불러와 teleop action 변환에 사용한다.
     controller_config = load_composite_controller_config(
         controller=None,
@@ -61,7 +62,8 @@ def make_env():
     )
 
     # free camera와 gripper 가이드를 함께 쓰는 현재 실행 환경이다.
-    env = DynamicObstacleEnv(
+    # single_object_mode=2: 매 에피소드 동일 물체 고정 (object_type 지정 시 자동 적용)
+    env_kwargs = dict(
         robots=ROBOT_NAME,
         controller_configs=controller_config,
         has_renderer=True,
@@ -71,7 +73,19 @@ def make_env():
         control_freq=20,
         ignore_done=True,
         hard_reset=False,
+        single_object_mode=single_object_mode,
+        object_type=object_type,
     )
+    # --wide-obstacle: 장애물 이동 범위를 pick 영역까지 확장
+    # bin 중심 기준으로 양쪽에 여유를 추가해 실제 pick/place 영역을 커버한다
+    if wide_obstacle:
+        bin1_y, bin2_y = -0.35, 0.38
+        env_kwargs["obstacle_y_center"] = (bin1_y + bin2_y) / 2
+        env_kwargs["obstacle_y_amplitude"] = (bin2_y - bin1_y) / 2
+    # --obstacle-speed: 기본값(1.1)보다 크면 빠르고, 작으면 느리다
+    if obstacle_speed is not None:
+        env_kwargs["obstacle_speed"] = obstacle_speed
+    env = DynamicObstacleEnv(**env_kwargs)
     env = VisualizationWrapper(env, indicator_configs=None)
     return env, controller_config
 
@@ -209,8 +223,23 @@ def save_success_episode(buffer, env, controller_config, episode_idx):
 
     print(f"[saved] {save_path}")
 
+def parse_args():
+    parser = argparse.ArgumentParser()
+    parser.add_argument("--object-type", type=str, default=None, choices=["milk", "bread", "cereal", "can"], help="지정하면 해당 물체 1개만 사용")
+    parser.add_argument("--wide-obstacle", action="store_true", help="장애물이 픽 영역까지 넓게 이동")
+    parser.add_argument("--obstacle-speed", type=float, default=None, help="장애물 이동 속도 배율 (기본값: 1.1)")
+    return parser.parse_args()
+
+
 def main():
-    env, controller_config = make_env()
+    args = parse_args()
+    single_object_mode = 2 if args.object_type else 0
+    env, controller_config = make_env(
+        single_object_mode=single_object_mode,
+        object_type=args.object_type,
+        wide_obstacle=args.wide_obstacle,
+        obstacle_speed=args.obstacle_speed,
+    )
     device = make_keyboard(env)
     np.set_printoptions(formatter={"float": lambda x: f"{x:0.3f}"})
 
