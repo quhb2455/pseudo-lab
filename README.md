@@ -11,7 +11,7 @@
 
 - 성공 기준은 현재 `task_success`가 아니라 `partial_success`다.
 - 물체가 1개 이상 목표 bin에 들어가면 현재 episode를 저장한다.
-- 저장 위치는 [data](/home/sub/workspace/RL_project/pseudo-lab/data) 아래의 `teleop_demos` 폴더다.
+- 저장 위치는 `data/teleop_demos` 폴더다.
 
 ## 실행
 
@@ -20,4 +20,31 @@
 ```bash
 uv sync
 uv run python run.py
+```
+
+## 실행 옵션
+
+| 옵션 | 설명 | 기본값 |
+|---|---|---|
+| `--object-type` | 물체 1개만 사용 (`milk`, `bread`, `cereal`, `can`) | 전체 물체 |
+| `--wide-obstacle` | 장애물 이동 범위를 pick 영역까지 확장 | 비활성 (place 영역만) |
+| `--obstacle-speed` | 장애물 이동 속도 배율 | `1.1` |
+
+### 예시
+
+```bash
+# 기본 실행 (팀원 원본과 동일)
+python run.py
+
+# milk 물체 1개만 사용
+python run.py --object-type milk
+
+# 장애물이 pick/place 전체 영역을 이동
+python run.py --wide-obstacle
+
+# 장애물 속도를 2배로
+python run.py --obstacle-speed 2.0
+
+# 옵션 조합
+python run.py --object-type milk --wide-obstacle --obstacle-speed 0.5
 ```
