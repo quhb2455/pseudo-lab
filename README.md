@@ -16,8 +16,6 @@
 ## 실행
 
 이 폴더는 `uv.lock`을 포함하고 있어서, 같은 플랫폼 기준으로 `uv`만으로 바로 환경을 맞출 수 있다.
-현재 설정은 `conda activate RL` 환경과 맞추기 위해 Python `3.11` 기준으로 잠가뒀다.
-
 ```bash
 uv sync --python 3.11
 uv run python run.py
