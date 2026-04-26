@@ -18,13 +18,13 @@ class DynamicObstacleEnv(PickPlace):
         # y를 음수 방향으로 조금 이동하면 화면 기준 왼쪽으로 비켜난 느낌이 난다.
         self.robot_base_shift = np.array([0.0, -0.08, 0.0])
 
-        # 공은 오른쪽 bin 위에서만 움직이도록 중심을 bin2 쪽에 둔다.
-        self.obstacle_x_center = float(bin2_pos[0] + 0.02)
-        self.obstacle_y_center = float(bin2_pos[1])
-        # 지그재그 범위를 더 넓게 보이도록 x / y 진폭을 키운다.
-        self.obstacle_x_amplitude = 0.16
-        self.obstacle_y_amplitude = 0.09
-        self.obstacle_speed = 1.1
+        # 장애물 이동 파라미터. kwargs로 받으면 기본값을 덮어쓸 수 있어 외부에서 모드를 전환하기 쉽다.
+        # pop을 쓰는 이유: PickPlace가 모르는 키를 super().__init__에 넘기면 오류가 나므로 미리 꺼낸다.
+        self.obstacle_x_center = float(kwargs.pop("obstacle_x_center", bin2_pos[0] + 0.02))
+        self.obstacle_y_center = float(kwargs.pop("obstacle_y_center", bin2_pos[1]))
+        self.obstacle_x_amplitude = float(kwargs.pop("obstacle_x_amplitude", 0.16))
+        self.obstacle_y_amplitude = float(kwargs.pop("obstacle_y_amplitude", 0.09))
+        self.obstacle_speed = float(kwargs.pop("obstacle_speed", 1.1))
 
         # 장애물을 직접 이동시키기 위해 x / y 슬라이드 조인트를 가진 구체를 추가한다.
         self.obstacle = BallObject(
@@ -74,6 +74,14 @@ class DynamicObstacleEnv(PickPlace):
 
         # 속도는 위치 변화량으로 계산하므로, reset 시점의 이전 위치도 함께 맞춰둔다.
         self.prev_pos = start_pos.copy()
+
+        # 로봇팔 초기 자세 조정
+        # joint 1 (shoulder lift): 기본값에서 0.35 감소 → 팔이 위로 올라가 장애물과의 초기 충돌 방지
+        # joint 5 (wrist): 2.5로 고정 → 그리퍼가 연직 방향에 가깝게 시작
+        joint_idxs = self.robots[0]._ref_joint_pos_indexes
+        self.sim.data.qpos[joint_idxs[1]] -= 0.35
+        self.sim.data.qpos[joint_idxs[5]] = 2.5
+        self.sim.forward()
 
     def _get_gripper_geom_names(self):
         # Panda gripper의 finger / fingerpad collision geom 이름을 모두 모은다.
