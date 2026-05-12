@@ -137,3 +137,149 @@ python run.py
 - `workflow.md`에 저장되는 HDF5 내부 구조 예시를 더 구체적으로 적기
 - `object_goal_status`를 HDF5 안에도 명시적으로 저장할지 결정하기
 - 필요하면 `partial_success`를 "특정 객체만 성공" 조건으로 더 좁게 바꾸기
+
+## 2026-05-12 BC-RNN Segment Training
+
+### 작업 내용
+
+- [utils.py](/home/sub/workspace/RL_project/pseudo-lab/utils.py)에 teleop demo 자동 구간 분할 코드를 추가했다.
+- 원본 bread demo를 아래 3개 하위 동작으로 나눴다.
+  - `approach`: 시작 지점에서 물체 근처로 이동
+  - `pick_lift`: gripper close 이후 물체를 들어올림
+  - `place_release`: 들어올린 뒤 목표 위치로 이동하고 놓기
+- 분할 기준은 `raw_actions/right_gripper`, `obs/Bread_pos`, `obs/robot0_eef_pos`, `partial_success`를 사용한다.
+- 분할 결과는 `/home/sub/workspace/RL_project/pseudo-lab/data/teleop_demos/bread/{TASK}`에 저장된다.
+- 이번 실행 결과:
+  - `approach`: 100개
+  - `pick_lift`: 101개
+  - `place_release`: 101개
+- [dataloader.py](/home/sub/workspace/RL_project/pseudo-lab/dataloader.py)에 segment HDF5를 BC-RNN 학습용 sequence로 읽는 Dataset, normalization, padding collate 로직을 추가했다.
+- [train.py](/home/sub/workspace/RL_project/pseudo-lab/train.py)에 LSTM 기반 BC-RNN 학습 코드를 추가했다.
+- `RL` conda 환경에 CPU용 PyTorch를 설치하고 세 task를 각각 40 epoch 학습했다.
+- 체크포인트와 로그는 `/home/sub/workspace/RL_project/checkpoints/{TASK}`에 저장된다.
+
+### 생성된 학습 산출물
+
+각 task 폴더에는 다음 파일이 저장된다.
+
+- `best.pt`: validation loss가 가장 낮은 모델
+- `last.pt`: 마지막 epoch 모델
+- `normalization.npz`: observation/action 정규화 통계
+- `train_log.csv`: epoch별 train/validation loss
+- `config.json`: 학습 설정과 입력/출력 차원
+
+최종 실행의 마지막 epoch loss는 다음과 같다.
+
+- `approach`: train `0.435151`, val `0.462549`
+- `pick_lift`: train `0.247600`, val `0.099120`
+- `place_release`: train `0.114054`, val `0.271425`
+
+### 다시 실행하는 방법
+
+구간 분할:
+
+```bash
+cd /home/sub/workspace/RL_project/pseudo-lab
+conda run -n RL python utils.py segment --data-dir data/teleop_demos/bread
+```
+
+BC-RNN 학습:
+
+```bash
+cd /home/sub/workspace/RL_project/pseudo-lab
+
+conda run -n RL python train.py \
+  --data-dir data/teleop_demos/bread/approach \
+  --output-dir /home/sub/workspace/RL_project/checkpoints/approach \
+  --epochs 40 --batch-size 16 --cpu
+
+conda run -n RL python train.py \
+  --data-dir data/teleop_demos/bread/pick_lift \
+  --output-dir /home/sub/workspace/RL_project/checkpoints/pick_lift \
+  --epochs 40 --batch-size 16 --cpu
+
+conda run -n RL python train.py \
+  --data-dir data/teleop_demos/bread/place_release \
+  --output-dir /home/sub/workspace/RL_project/checkpoints/place_release \
+  --epochs 40 --batch-size 16 --cpu
+```
+
+GPU가 있는 환경에서는 `--cpu`를 제거하면 CUDA 사용 가능 여부에 따라 자동으로 GPU를 사용한다.
+
+### 2026-05-12 Autoresearch 최종 결과
+
+`codex-autoresearch`로 `train.py`, `dataloader.py` 범위 안에서 BC-RNN segment validation score를 개선했다.
+
+- 검증 metric: `approach`, `pick_lift`, `place_release`의 mean best validation loss
+- 검증 명령:
+
+```bash
+python codex_autoresearch_verify.py \
+  --python /home/sub/anaconda3/envs/torch2.2/bin/python \
+  --epochs 100 --batch-size 16
+```
+
+- 사용한 Python 환경: `/home/sub/anaconda3/envs/torch2.2/bin/python`
+- 해당 환경의 PyTorch는 CUDA 사용 가능 상태였다.
+- autoresearch 기록 파일:
+  - `autoresearch-results/results.tsv`
+  - `autoresearch-results/state.json`
+  - `autoresearch-results/lessons.md`
+
+가장 좋은 성능은 iteration `27`에서 나왔다.
+
+- baseline mean best validation loss: `0.262262982626756`
+- best mean best validation loss: `0.06411466468125582`
+- best task별 loss:
+  - `approach`: `0.09146139770746231`
+  - `pick_lift`: `0.015620998106896877`
+  - `place_release`: `0.08526159822940826`
+
+iteration `27`에서 유지한 변경 사항은 아래와 같다.
+
+- [train.py](/home/sub/workspace/RL_project/pseudo-lab/train.py)의 `BCRNN` LSTM을 bidirectional로 변경했다.
+  - `nn.LSTM(..., bidirectional=True)`
+- bidirectional 출력에 맞춰 action head 입력 차원을 `hidden_dim * 2`로 바꿨다.
+  - `nn.LayerNorm(hidden_dim * 2)`
+  - `nn.Linear(hidden_dim * 2, action_dim)`
+- 학습 시 LSTM dropout을 끄도록 모델 생성 인자를 `0.0`으로 고정했다.
+  - `BCRNN(..., args.num_layers, 0.0)`
+- AdamW optimizer 설정을 조정했다.
+  - learning rate: `args.lr * 2.25`
+  - weight decay: `args.weight_decay * 0.1`
+
+최종적으로 `train.py`의 핵심 설정은 아래 상태로 남겨뒀다.
+
+```python
+self.rnn = nn.LSTM(
+    input_size=obs_dim,
+    hidden_size=hidden_dim,
+    num_layers=num_layers,
+    dropout=dropout if num_layers > 1 else 0.0,
+    batch_first=True,
+    bidirectional=True,
+)
+self.head = nn.Sequential(nn.LayerNorm(hidden_dim * 2), nn.Linear(hidden_dim * 2, action_dim))
+```
+
+```python
+model = BCRNN(sample_obs.shape[-1], sample_act.shape[-1], args.hidden_dim, args.num_layers, 0.0).to(device)
+optimizer = torch.optim.AdamW(model.parameters(), lr=args.lr * 2.25, weight_decay=args.weight_decay * 0.1)
+```
+
+시도했지만 유지하지 않은 주요 실험은 아래와 같다.
+
+- observation key 추가: validation loss 악화
+- `ReduceLROnPlateau`: validation loss 악화
+- EMA weight validation/checkpoint: validation loss 악화
+- action head dropout: validation loss 악화
+- packed sequence 처리: 일부 task는 좋아졌지만 평균 악화
+- lr `2.75x`, `3.0x`, `2.0x`: best보다 악화
+- hidden dimension `1.5x`: 평균 악화 및 실행 시간 증가
+- 2-layer GELU MLP head: `place_release` 악화
+- train-time observation noise: 평균 악화
+- SmoothL1 training objective: `approach`, `place_release` 악화
+- 1-layer bidirectional LSTM: 평균 악화
+
+autoresearch는 사용자가 명시적으로 중단 요청한 뒤 iteration `29`에 `blocked` 상태를 기록해 멈췄다.
+iteration `29`는 성능 실험이 아니라 stop hook 재실행을 막기 위한 수동 종료 기록이다.
